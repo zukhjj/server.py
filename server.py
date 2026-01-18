@@ -12,7 +12,7 @@ controller = None
 background_controller=None
 
 async def handler(websocket):
-    global controller,rdid
+    global controller,rdid,background_controller
     try:
         first_msg = await websocket.recv()
         print(first_msg)
@@ -110,3 +110,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
